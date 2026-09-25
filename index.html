@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>ShortlinkKu - URL Shortener</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #f7f7fb;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #182033;
+}
+
+/* HEADER */
+.header {
+    height: 105px;
+    background: white;
+    border-bottom: 1px solid #e8e8ee;
+    display: flex;
+    align-items: center;
+    padding: 0 35px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 29px;
+    font-weight: 600;
+}
+
+.logo-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #172238;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 25px;
+}
+
+.menu {
+    margin-left: auto;
+    width: 70px;
+    height: 65px;
+    border: 1px solid #d8d8df;
+    border-radius: 18px;
+    background: white;
+    font-size: 30px;
+}
+
+/* HERO */
+.hero {
+    text-align: center;
+    padding: 85px 20px 45px;
+}
+
+.hero h1 {
+    margin: 0;
+    font-size: 60px;
+    line-height: 1.35;
+    font-weight: 700;
+}
+
+.hero h1 span {
+    color: #7654e8;
+}
+
+.hero p {
+    font-size: 21px;
+    color: #596273;
+    margin-top: 30px;
+}
+
+.hero strong {
+    color: #7654e8;
+}
+
+/* CARD */
+.card {
+    width: calc(100% - 40px);
+    max-width: 900px;
+    margin: 20px auto 50px;
+    background: white;
+    border-radius: 28px;
+    padding: 35px;
+    box-shadow: 0 10px 35px rgba(0,0,0,.08);
+}
+
+.tabs {
+    display: flex;
+    gap: 55px;
+    border-bottom: 1px solid #eeeeef;
+    margin-bottom: 38px;
+}
+
+.tab {
+    padding: 0 10px 18px;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.tab.active {
+    color: #5b46df;
+    border-bottom: 3px solid #5b46df;
+}
+
+/* FORM */
+label {
+    display: block;
+    font-size: 20px;
+    margin-bottom: 13px;
+}
+
+select,
+input {
+    width: 100%;
+    height: 70px;
+    border: 1px solid #d7d9df;
+    border-radius: 22px;
+    padding: 0 25px;
+    font-size: 18px;
+    outline: none;
+    background: white;
+}
+
+input:focus,
+select:focus {
+    border: 2px solid #7564e8;
+}
+
+.form-group {
+    margin-bottom: 30px;
+}
+
+button.shorten {
+    width: 100%;
+    height: 70px;
+    border: 0;
+    border-radius: 22px;
+    background: #5541df;
+    color: white;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+button.shorten:hover {
+    background: #4532c8;
+}
+
+button:disabled {
+    opacity: .6;
+}
+
+/* RESULT */
+.result {
+    display: none;
+    margin-top: 30px;
+    padding: 22px;
+    border-radius: 18px;
+    background: #f1efff;
+}
+
+.result-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.short-url {
+    display: flex;
+    gap: 10px;
+}
+
+.short-url input {
+    height: 55px;
+    background: white;
+}
+
+.copy {
+    width: 120px;
+    border: 0;
+    border-radius: 15px;
+    background: #5541df;
+    color: white;
+    font-size: 16px;
+}
+
+/* ERROR */
+.error {
+    display: none;
+    margin-top: 20px;
+    color: #d32f2f;
+}
+
+/* INFO */
+.info {
+    width: calc(100% - 40px);
+    max-width: 900px;
+    margin: 0 auto 50px;
+    background: white;
+    padding: 28px;
+    border-radius: 25px;
+}
+
+.info h2 {
+    margin-top: 0;
+}
+
+/* MOBILE */
+@media(max-width:600px) {
+
+    .header {
+        height: 85px;
+        padding: 0 18px;
+    }
+
+    .logo {
+        font-size: 23px;
+    }
+
+    .logo-icon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .menu {
+        width: 55px;
+        height: 52px;
+    }
+
+    .hero {
+        padding-top: 55px;
+    }
+
+    .hero h1 {
+        font-size: 42px;
+    }
+
+    .hero p {
+        font-size: 17px;
+    }
+
+    .card {
+        padding: 23px;
+        width: calc(100% - 20px);
+    }
+
+    .tabs {
+        gap: 25px;
+    }
+
+    .tab {
+        font-size: 18px;
+    }
+
+    label {
+        font-size: 18px;
+    }
+
+    select,
+    input,
+    button.shorten {
+        height: 62px;
+        font-size: 16px;
+    }
+
+    .short-url {
+        flex-direction: column;
+    }
+
+    .copy {
+        width: 100%;
+        height: 55px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="header">
+
+    <div class="logo">
+        <div class="logo-icon">↗</div>
+        SHORTMYLINK
+    </div>
+
+    <button class="menu">☰</button>
+
+</header>
+
+
+<!-- HERO -->
+<section class="hero">
+
+    <h1>
+        <span>Pendekkan.</span><br>
+        Bagikan.<br>
+        Analisa.
+    </h1>
+
+    <p>
+        Telah Membuat
+        <strong>812,738</strong>
+        Link • Mencatat
+        <strong>904,473,450</strong>
+        Klik
+    </p>
+
+</section>
+
+
+<!-- SHORTENER -->
+<div class="card">
+
+    <div class="tabs">
+
+        <div class="tab active">
+            Single URL
+        </div>
+
+        <div class="tab">
+            Bulk URL
+        </div>
+
+    </div>
+
+
+    <div class="form-group">
+
+        <label>Pilih Domain</label>
+
+        <select id="domain">
+
+            <option value="https://is.gd/">
+                is.gd
+            </option>
+
+            <option value="https://v.gd/">
+                v.gd
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <div class="form-group">
+
+        <label>Tempel URL</label>
+
+        <input
+            type="url"
+            id="longUrl"
+            placeholder="https://contoh.com/"
+            autocomplete="off"
+        >
+
+    </div>
+
+
+    <button
+        class="shorten"
+        id="shortenBtn"
+        onclick="shortenURL()"
+    >
+        → Buat Shortlink
+    </button>
+
+
+    <div class="error" id="error"></div>
+
+
+    <div class="result" id="result">
+
+        <div class="result-title">
+            Shortlink berhasil dibuat:
+        </div>
+
+        <div class="short-url">
+
+            <input
+                id="shortUrl"
+                readonly
+            >
+
+            <button
+                class="copy"
+                onclick="copyURL()"
+            >
+                Salin
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- INFO -->
+<div class="info">
+
+    <h2>🔗 URL Shortener</h2>
+
+    <p>
+        Masukkan URL panjang dan sistem akan membuat
+        link pendek yang dapat dibagikan.
+    </p>
+
+    <p>
+        Cocok digunakan untuk website, blog,
+        media sosial, dan kampanye link.
+    </p>
+
+</div>
+
+
+<script>
+
+function shortenURL() {
+
+    const input = document.getElementById("longUrl");
+    const button = document.getElementById("shortenBtn");
+    const result = document.getElementById("result");
+    const error = document.getElementById("error");
+    const shortUrl = document.getElementById("shortUrl");
+
+    const url = input.value.trim();
+
+    error.style.display = "none";
+    result.style.display = "none";
+
+    if (!url) {
+
+        showError("Silakan masukkan URL terlebih dahulu.");
+        return;
+
+    }
+
+    try {
+
+        const validURL = new URL(url);
+
+        if (
+            validURL.protocol !== "http:" &&
+            validURL.protocol !== "https:"
+        ) {
+
+            throw new Error();
+
+        }
+
+    } catch {
+
+        showError(
+            "URL tidak valid. Gunakan format https://contoh.com/"
+        );
+
+        return;
+
+    }
+
+
+    button.disabled = true;
+    button.textContent = "Membuat shortlink...";
+
+
+    /*
+        JSONP digunakan agar halaman yang
+        dipasang di GitHub Pages dapat
+        berkomunikasi dengan API is.gd.
+    */
+
+    const callbackName =
+        "shortenerCallback_" +
+        Date.now();
+
+    window[callbackName] = function(data) {
+
+        button.disabled = false;
+        button.textContent = "→ Buat Shortlink";
+
+        if (data.shorturl) {
+
+            shortUrl.value = data.shorturl;
+            result.style.display = "block";
+
+        } else {
+
+            showError(
+                data.errormessage ||
+                "Gagal membuat shortlink."
+            );
+
+        }
+
+        delete window[callbackName];
+
+        if (script.parentNode) {
+            script.parentNode.removeChild(script);
+        }
+
+    };
+
+
+    const script = document.createElement("script");
+
+    script.src =
+        "https://is.gd/create.php" +
+        "?format=json" +
+        "&callback=" +
+        callbackName +
+        "&url=" +
+        encodeURIComponent(url);
+
+    script.onerror = function() {
+
+        button.disabled = false;
+        button.textContent = "→ Buat Shortlink";
+
+        showError(
+            "Tidak dapat terhubung ke layanan shortener."
+        );
+
+        delete window[callbackName];
+
+        if (script.parentNode) {
+            script.parentNode.removeChild(script);
+        }
+
+    };
+
+    document.body.appendChild(script);
+
+}
+
+
+function showError(message) {
+
+    const error =
+        document.getElementById("error");
+
+    error.textContent = message;
+    error.style.display = "block";
+
+}
+
+
+function copyURL() {
+
+    const input =
+        document.getElementById("shortUrl");
+
+    navigator.clipboard.writeText(input.value)
+        .then(function() {
+
+            const button =
+                document.querySelector(".copy");
+
+            button.textContent = "Tersalin ✓";
+
+            setTimeout(function() {
+
+                button.textContent = "Salin";
+
+            }, 1500);
+
+        });
+
+}
+
+</script>
+
+</body>
+</html>
