@@ -1,917 +1,241 @@
-<!DOCTYPE html>
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    // 1. API Pemendek Single Link
+    if (request.method === "POST" && url.pathname === "/shorten") {
+      try {
+        const { longUrl, customSlug } = await request.json();
+        if (!longUrl) return new Response(JSON.stringify({ error: "URL wajib diisi!" }), { status: 400 });
+
+        const slug = customSlug ? customSlug.trim() : Math.random().toString(36).substring(2, 8);
+        const existing = await env.URL_DB.get(slug);
+        if (existing && customSlug) {
+          return new Response(JSON.stringify({ error: "Custom link sudah digunakan!" }), { status: 400 });
+        }
+
+        await env.URL_DB.put(slug, longUrl);
+        return new Response(JSON.stringify({ shortUrl: `${url.origin}/${slug}`, slug }), {
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+      }
+    }
+
+    // 2. API Pemendek Bulk Link (Banyak Link Sekaligus)
+    if (request.method === "POST" && url.pathname === "/shorten-bulk") {
+      try {
+        const { urls } = await request.json();
+        if (!urls || !Array.isArray(urls) || urls.length === 0) {
+          return new Response(JSON.stringify({ error: "Daftar URL wajib diisi!" }), { status: 400 });
+        }
+
+        const results = [];
+        for (let longUrl of urls) {
+          longUrl = longUrl.trim();
+          if (!longUrl) continue;
+          
+          if (!longUrl.startsWith('http://') && !longUrl.startsWith('https://')) {
+            longUrl = 'https://' + longUrl;
+          }
+
+          const slug = Math.random().toString(36).substring(2, 8);
+          await env.URL_DB.put(slug, longUrl);
+          results.push({ longUrl, shortUrl: `${url.origin}/${slug}`, slug });
+        }
+
+        return new Response(JSON.stringify({ results }), {
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+      }
+    }
+
+    // 3. Tampilan Antarmuka Web (UI Frontend)
+    if (url.pathname === "/" || url.pathname === "") {
+      const html = `<!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>ShortlinkKu - URL Shortener</title>
-
-<meta name="description"
-content="ShortlinkKu adalah layanan pemendek URL sederhana, cepat dan mudah digunakan.">
-
-<meta name="theme-color" content="#2563eb">
-
-<style>
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
-body {
-    font-family: Arial, Helvetica, sans-serif;
-    background: #f5f7fb;
-    color: #222;
-    min-height: 100vh;
-}
-
-/* =========================
-   HEADER
-========================= */
-
-header {
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
-    padding: 16px 20px;
-}
-
-.header-inner {
-    max-width: 1100px;
-    margin: auto;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 22px;
-    font-weight: 800;
-    color: #111827;
-}
-
-.logo-icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    background: #2563eb;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 21px;
-}
-
-/* =========================
-   HERO
-========================= */
-
-.hero {
-    max-width: 900px;
-    margin: 65px auto 30px;
-    padding: 0 20px;
-    text-align: center;
-}
-
-.hero h1 {
-    font-size: 42px;
-    line-height: 1.15;
-    margin-bottom: 15px;
-    color: #111827;
-}
-
-.hero p {
-    color: #6b7280;
-    font-size: 17px;
-    line-height: 1.6;
-}
-
-/* =========================
-   SHORTENER
-========================= */
-
-.shortener-box {
-    max-width: 850px;
-    margin: 35px auto;
-    padding: 25px;
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 10px 35px rgba(0,0,0,.07);
-}
-
-.input-group {
-    display: flex;
-    gap: 10px;
-}
-
-.input-group input {
-    flex: 1;
-    min-width: 0;
-    height: 55px;
-    padding: 0 17px;
-    border: 1px solid #d1d5db;
-    border-radius: 10px;
-    outline: none;
-    font-size: 16px;
-}
-
-.input-group input:focus {
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37,99,235,.1);
-}
-
-.shorten-btn {
-    height: 55px;
-    border: 0;
-    padding: 0 28px;
-    border-radius: 10px;
-    background: #2563eb;
-    color: #fff;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background .2s, transform .1s;
-}
-
-.shorten-btn:hover {
-    background: #1d4ed8;
-}
-
-.shorten-btn:active {
-    transform: scale(.98);
-}
-
-.shorten-btn:disabled {
-    opacity: .7;
-    cursor: wait;
-}
-
-/* =========================
-   RESULT
-========================= */
-
-.result {
-    display: none;
-    margin-top: 20px;
-    padding: 18px;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-radius: 10px;
-}
-
-.result-title {
-    margin-bottom: 10px;
-    color: #166534;
-    font-weight: 700;
-}
-
-.result-row {
-    display: flex;
-    gap: 10px;
-}
-
-.result-row input {
-    flex: 1;
-    min-width: 0;
-    height: 48px;
-    padding: 0 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    background: #fff;
-}
-
-.copy-btn {
-    height: 48px;
-    border: 0;
-    padding: 0 20px;
-    border-radius: 8px;
-    background: #16a34a;
-    color: #fff;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.copy-btn:hover {
-    background: #15803d;
-}
-
-/* =========================
-   STATS
-========================= */
-
-.stats {
-    max-width: 850px;
-    margin: 25px auto;
-    padding: 0 20px;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 15px;
-}
-
-.stat {
-    padding: 25px;
-    background: #fff;
-    border-radius: 15px;
-    text-align: center;
-    box-shadow: 0 5px 20px rgba(0,0,0,.05);
-}
-
-.stat-number {
-    color: #2563eb;
-    font-size: 28px;
-    font-weight: 800;
-}
-
-.stat-label {
-    margin-top: 6px;
-    color: #6b7280;
-}
-
-/* =========================
-   FOOTER
-========================= */
-
-footer {
-    padding: 45px 20px;
-    text-align: center;
-    color: #9ca3af;
-    font-size: 14px;
-}
-
-/* =========================
-   INTERSTITIAL
-========================= */
-
-#interstitial {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 99999;
-    overflow-y: auto;
-    background: #f5f7fb;
-}
-
-.interstitial-box {
-    width: min(600px, calc(100% - 30px));
-    margin: 80px auto;
-    padding: 35px 25px;
-    background: #fff;
-    border-radius: 18px;
-    text-align: center;
-    box-shadow: 0 10px 40px rgba(0,0,0,.1);
-}
-
-.interstitial-box h2 {
-    margin-bottom: 12px;
-    color: #111827;
-    font-size: 28px;
-}
-
-.interstitial-box p {
-    margin-bottom: 25px;
-    color: #6b7280;
-    line-height: 1.6;
-}
-
-.ad-button {
-    display: inline-block;
-    margin-bottom: 20px;
-    padding: 15px 30px;
-    border-radius: 10px;
-    background: #2563eb;
-    color: #fff;
-    text-decoration: none;
-    font-weight: 700;
-}
-
-.ad-button:hover {
-    background: #1d4ed8;
-}
-
-.countdown {
-    margin: 15px 0;
-    color: #6b7280;
-    font-size: 14px;
-}
-
-.continue-button {
-    width: 100%;
-    height: 52px;
-    border: 0;
-    border-radius: 10px;
-    background: #111827;
-    color: #fff;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.continue-button:disabled {
-    background: #9ca3af;
-    cursor: not-allowed;
-}
-
-/* =========================
-   MOBILE
-========================= */
-
-@media (max-width:700px) {
-
-    .hero {
-        margin-top: 45px;
-    }
-
-    .hero h1 {
-        font-size: 32px;
-    }
-
-    .hero p {
-        font-size: 15px;
-    }
-
-    .shortener-box {
-        margin: 25px 15px;
-        padding: 18px;
-    }
-
-    .input-group {
-        flex-direction: column;
-    }
-
-    .shorten-btn {
-        width: 100%;
-    }
-
-    .result-row {
-        flex-direction: column;
-    }
-
-    .copy-btn {
-        width: 100%;
-    }
-
-    .stats {
-        grid-template-columns: 1fr;
-        padding: 0 15px;
-    }
-
-    .interstitial-box {
-        margin: 40px auto;
-    }
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shortlink - croot.site</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; color: #1e293b; }
+    .card { background: white; padding: 28px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 520px; }
+    h1 { text-align: center; color: #0f172a; font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+    p.sub { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 20px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; background: #f1f5f9; padding: 4px; border-radius: 10px; }
+    .tab-btn { flex: 1; padding: 10px; border: none; background: transparent; font-weight: 600; font-size: 14px; color: #64748b; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
+    .tab-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+    input, textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; transition: border 0.2s; }
+    textarea { resize: vertical; min-height: 120px; font-family: monospace; }
+    input:focus, textarea:focus { border-color: #2563eb; }
+    button.btn-submit { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 15px; cursor: pointer; margin-top: 6px; }
+    button.btn-submit:hover { background: #1d4ed8; }
+    .result-box { margin-top: 20px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; display: none; }
+    .result-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #edf2f7; font-size: 13px; gap: 10px; }
+    .result-item:last-child { border-bottom: none; }
+    .result-item a { color: #2563eb; font-weight: 700; text-decoration: none; word-break: break-all; }
+    .btn-copy { background: #e2e8f0; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .btn-copy:hover { background: #cbd5e1; }
+    .error { color: #dc2626; font-size: 13px; margin-top: 10px; display: none; text-align: center; }
+  </style>
 </head>
-
 <body>
+  <div class="card">
+    <h1>croot.site</h1>
+    <p class="sub">Pemendek Tautan & Bulk Link Shortener</p>
 
-<header>
-    <div class="header-inner">
-        <div class="logo">
-            <div class="logo-icon">↗</div>
-            <span>ShortlinkKu</span>
-        </div>
-    </div>
-</header>
-
-<section class="hero">
-    <h1>Pendekkan. Bagikan. Analisa.</h1>
-
-    <p>
-        Buat link panjang menjadi lebih pendek
-        dan mudah dibagikan menggunakan ShortlinkKu.
-    </p>
-</section>
-
-<main>
-
-    <div class="shortener-box">
-
-        <div class="input-group">
-
-            <input
-                type="url"
-                id="urlInput"
-                placeholder="Masukkan URL panjang..."
-                autocomplete="off"
-                inputmode="url"
-                spellcheck="false"
-            >
-
-            <button
-                type="button"
-                class="shorten-btn"
-                id="shortenButton">
-                Pendekkan
-            </button>
-
-        </div>
-
-        <div class="result" id="result">
-
-            <div class="result-title">
-                ✓ Link berhasil dibuat
-            </div>
-
-            <div class="result-row">
-
-                <input
-                    type="text"
-                    id="shortUrl"
-                    readonly
-                    aria-label="Short URL"
-                >
-
-                <button
-                    type="button"
-                    class="copy-btn"
-                    id="copyButton">
-                    Salin
-                </button>
-
-            </div>
-
-        </div>
-
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('single')">Single Link</button>
+      <button class="tab-btn" onclick="switchTab('bulk')">Bulk (Banyak Link)</button>
     </div>
 
-    <div class="stats">
-
-        <div class="stat">
-            <div class="stat-number">812,738</div>
-            <div class="stat-label">Link Dibuat</div>
-        </div>
-
-        <div class="stat">
-            <div class="stat-number">904,473,450</div>
-            <div class="stat-label">Total Klik</div>
-        </div>
-
+    <!-- Tab Single -->
+    <div id="tab-single" class="tab-content active">
+      <div class="form-group">
+        <label>URL Panjang</label>
+        <input type="url" id="longUrl" placeholder="https://example.com/link-panjang" required>
+      </div>
+      <div class="form-group">
+        <label>Custom Link (Opsional)</label>
+        <input type="text" id="customSlug" placeholder="contoh: diskon-promo">
+      </div>
+      <button class="btn-submit" onclick="shortenSingle()">Pendekkan Link</button>
     </div>
 
-</main>
-
-<footer>
-    © 2026 ShortlinkKu. Semua hak dilindungi.
-</footer>
-
-
-<!-- =========================
-     INTERSTITIAL
-========================= -->
-
-<div id="interstitial" aria-hidden="true">
-
-    <div class="interstitial-box">
-
-        <h2>Tunggu sebentar...</h2>
-
-        <p>
-            Link kamu sedang disiapkan.
-            Silakan buka iklan terlebih dahulu,
-            kemudian lanjutkan ke halaman tujuan.
-        </p>
-
-        <a
-            id="adLink"
-            class="ad-button"
-            href="https://thewilddetail.com/z02a1bxd?key=f48d1b3a91d0b1fd3db51c3c384a044b"
-            target="_blank"
-            rel="noopener noreferrer">
-            BUKA IKLAN
-        </a>
-
-        <div
-            class="countdown"
-            id="countdown"
-            aria-live="polite">
-            Silakan tunggu 5 detik...
-        </div>
-
-        <button
-            type="button"
-            id="continueButton"
-            class="continue-button"
-            disabled>
-            Tunggu 5 detik
-        </button>
-
+    <!-- Tab Bulk -->
+    <div id="tab-bulk" class="tab-content">
+      <div class="form-group">
+        <label>Daftar URL (1 URL per baris)</label>
+        <textarea id="bulkUrls" placeholder="https://link1.com&#10;https://link2.com&#10;https://link3.com"></textarea>
+      </div>
+      <button class="btn-submit" onclick="shortenBulk()">Pendekkan Semua Link</button>
     </div>
 
-</div>
+    <div id="error" class="error"></div>
+    <div id="result" class="result-box"></div>
+  </div>
 
+  <script>
+    function switchTab(type) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('result').style.display = 'none';
 
-<script>
-"use strict";
-
-/* =========================
-   KONFIGURASI
-========================= */
-
-const CONFIG = {
-    adLink:
-        "https://thewilddetail.com/z02a1bxd?key=f48d1b3a91d0b1fd3db51c3c384a044b",
-
-    countdown: 5,
-
-    api:
-        "https://is.gd/create.php"
-};
-
-
-/* =========================
-   ELEMENT
-========================= */
-
-const urlInput =
-    document.getElementById("urlInput");
-
-const shortenButton =
-    document.getElementById("shortenButton");
-
-const result =
-    document.getElementById("result");
-
-const shortUrl =
-    document.getElementById("shortUrl");
-
-const copyButton =
-    document.getElementById("copyButton");
-
-const interstitial =
-    document.getElementById("interstitial");
-
-const countdown =
-    document.getElementById("countdown");
-
-const continueButton =
-    document.getElementById("continueButton");
-
-const adLink =
-    document.getElementById("adLink");
-
-
-let destinationURL = "";
-let timer = null;
-
-
-/* =========================
-   SETUP
-========================= */
-
-adLink.href = CONFIG.adLink;
-
-
-/* =========================
-   VALIDASI URL
-========================= */
-
-function isValidURL(value) {
-
-    try {
-
-        const url = new URL(value);
-
-        return (
-            url.protocol === "http:" ||
-            url.protocol === "https:"
-        );
-
-    } catch {
-
-        return false;
-
+      if(type === 'single') {
+        event.target.classList.add('active');
+        document.getElementById('tab-single').classList.add('active');
+      } else {
+        event.target.classList.add('active');
+        document.getElementById('tab-bulk').classList.add('active');
+      }
     }
 
-}
+    async function shortenSingle() {
+      const longUrl = document.getElementById('longUrl').value.trim();
+      const customSlug = document.getElementById('customSlug').value.trim();
+      showError('');
+      
+      if(!longUrl) return showError('Masukkan URL terlebih dahulu!');
 
-
-/* =========================
-   SHORTEN URL
-========================= */
-
-async function shortenURL() {
-
-    const url =
-        urlInput.value.trim();
-
-    if (!url) {
-
-        alert("Masukkan URL terlebih dahulu.");
-
-        urlInput.focus();
-
-        return;
-
-    }
-
-    if (!isValidURL(url)) {
-
-        alert(
-            "URL tidak valid.\n\nContoh:\nhttps://contoh.com"
-        );
-
-        urlInput.focus();
-
-        return;
-
-    }
-
-
-    shortenButton.disabled = true;
-    shortenButton.textContent = "Memproses...";
-
-
-    try {
-
-        const apiURL =
-            CONFIG.api +
-            "?format=json&url=" +
-            encodeURIComponent(url);
-
-
-        const response =
-            await fetch(apiURL, {
-                method: "GET",
-                mode: "cors",
-                cache: "no-store"
-            });
-
-
-        if (!response.ok) {
-            throw new Error("Request gagal");
-        }
-
-
-        const data =
-            await response.json();
-
-
-        if (!data.shorturl) {
-            throw new Error("Short URL tidak tersedia");
-        }
-
-
-        destinationURL = url;
-
-        shortUrl.value =
-            data.shorturl;
-
-        result.style.display =
-            "block";
-
-
-        localStorage.setItem(
-            "destinationURL",
-            destinationURL
-        );
-
-
-        result.scrollIntoView({
-            behavior: "smooth",
-            block: "nearest"
+      try {
+        const res = await fetch('/shorten', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ longUrl, customSlug })
         });
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            "Gagal membuat shortlink.\nSilakan coba lagi."
-        );
-
-    } finally {
-
-        shortenButton.disabled = false;
-
-        shortenButton.textContent =
-            "Pendekkan";
-
-    }
-
-}
-
-
-/* =========================
-   COPY
-========================= */
-
-async function copyURL() {
-
-    if (!shortUrl.value) {
-        return;
-    }
-
-
-    try {
-
-        await navigator.clipboard.writeText(
-            shortUrl.value
-        );
-
-        copyButton.textContent =
-            "✓ Tersalin!";
-
-
-    } catch {
-
-        shortUrl.select();
-
-        document.execCommand("copy");
-
-        copyButton.textContent =
-            "✓ Tersalin!";
-
-    }
-
-
-    setTimeout(function() {
-
-        copyButton.textContent =
-            "Salin";
-
-    }, 1500);
-
-}
-
-
-/* =========================
-   INTERSTITIAL
-========================= */
-
-function openInterstitial(url) {
-
-    if (!isValidURL(url)) {
-
-        alert("URL tujuan tidak valid.");
-
-        return;
-
-    }
-
-
-    destinationURL = url;
-
-
-    clearInterval(timer);
-
-
-    let seconds =
-        CONFIG.countdown;
-
-
-    interstitial.style.display =
-        "block";
-
-    interstitial.setAttribute(
-        "aria-hidden",
-        "false"
-    );
-
-
-    document.body.style.overflow =
-        "hidden";
-
-
-    countdown.textContent =
-        "Silakan tunggu " +
-        seconds +
-        " detik...";
-
-
-    continueButton.disabled =
-        true;
-
-    continueButton.textContent =
-        "Tunggu " +
-        seconds +
-        " detik";
-
-
-    timer =
-        setInterval(function() {
-
-            seconds--;
-
-
-            if (seconds <= 0) {
-
-                clearInterval(timer);
-
-                countdown.textContent =
-                    "Link sudah siap.";
-
-                continueButton.disabled =
-                    false;
-
-                continueButton.textContent =
-                    "LANJUTKAN";
-
-                return;
-
-            }
-
-
-            countdown.textContent =
-                "Silakan tunggu " +
-                seconds +
-                " detik...";
-
-
-            continueButton.textContent =
-                "Tunggu " +
-                seconds +
-                " detik";
-
-
-        }, 1000);
-
-}
-
-
-/* =========================
-   LANJUTKAN
-========================= */
-
-function goToDestination() {
-
-    if (!destinationURL) {
-
-        alert(
-            "URL tujuan tidak ditemukan."
-        );
-
-        return;
-
-    }
-
-
-    window.location.assign(
-        destinationURL
-    );
-
-}
-
-
-/* =========================
-   EVENT
-========================= */
-
-shortenButton.addEventListener(
-    "click",
-    shortenURL
-);
-
-
-copyButton.addEventListener(
-    "click",
-    copyURL
-);
-
-
-continueButton.addEventListener(
-    "click",
-    goToDestination
-);
-
-
-/* Enter = Pendekkan */
-
-urlInput.addEventListener(
-    "keydown",
-    function(event) {
-
-        if (event.key === "Enter") {
-
-            event.preventDefault();
-
-            shortenURL();
-
+        const data = await res.json();
+        if(res.ok) {
+          showResult(\`<div class="result-item">
+            <a href="\${data.shortUrl}" target="_blank">\${data.shortUrl}</a>
+            <button class="btn-copy" onclick="copyText('\${data.shortUrl}')">Salin</button>
+          </div>\`);
+        } else {
+          showError(data.error || 'Gagal membuat link.');
         }
-
+      } catch(e) {
+        showError('Terjadi kesalahan koneksi.');
+      }
     }
-);
 
+    async function shortenBulk() {
+      const raw = document.getElementById('bulkUrls').value.trim();
+      showError('');
+      if(!raw) return showError('Masukkan setidaknya satu URL!');
 
-/* =========================
-   DEMO INTERSTITIAL
-========================= */
+      const urls = raw.split('\\n').map(u => u.trim()).filter(u => u.length > 0);
+      if(urls.length === 0) return showError('URL tidak valid.');
 
-shortUrl.addEventListener(
-    "click",
-    function() {
-
-        if (destinationURL) {
-
-            openInterstitial(
-                destinationURL
-            );
-
+      try {
+        const res = await fetch('/shorten-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls })
+        });
+        const data = await res.json();
+        if(res.ok) {
+          let html = '<div style="margin-bottom:10px; font-weight:bold; font-size:13px;">Hasil Pemendekan Massal:</div>';
+          let allShorts = [];
+          data.results.forEach(item => {
+            allShorts.push(item.shortUrl);
+            html += \`<div class="result-item">
+              <span style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:#64748b;">\${item.longUrl}</span>
+              <div>
+                <a href="\${item.shortUrl}" target="_blank" style="margin-right:8px;">\${item.shortUrl}</a>
+                <button class="btn-copy" onclick="copyText('\${item.shortUrl}')">Salin</button>
+              </div>
+            </div>\`;
+          });
+          html += \`<button class="btn-submit" style="margin-top:12px; background:#059669;" onclick="copyText('\${allShorts.join('\\\\n')}')">Salin Semua Shortlink</button>\`;
+          showResult(html);
+        } else {
+          showError(data.error || 'Gagal memproses bulk link.');
         }
-
+      } catch(e) {
+        showError('Terjadi kesalahan koneksi.');
+      }
     }
-);
-</script>
 
+    function showError(msg) {
+      const err = document.getElementById('error');
+      if(!msg) { err.style.display = 'none'; return; }
+      err.innerText = msg;
+      err.style.display = 'block';
+    }
+
+    function showResult(html) {
+      const res = document.getElementById('result');
+      res.innerHTML = html;
+      res.style.display = 'block';
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+      alert('Tautan disalin ke clipboard!');
+    }
+  </script>
 </body>
-</html>
-```
+</html>`;
+      return new Response(html, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
+    }
+
+    // 4. Proses Redirect Shortlink
+    const slug = url.pathname.substring(1);
+    const destination = await env.URL_DB.get(slug);
+
+    if (destination) {
+      return Response.redirect(destination, 302);
+    }
+
+    return new Response("Tautan tidak ditemukan atau sudah dihapus.", { status: 404 });
+  }
+};
